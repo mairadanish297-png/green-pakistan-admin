@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/system_config/admin)
+        && get(/databases/$(database)/documents/system_config/admin).data.uid == request.auth.uid;
+    }
+
+    // The first authenticated account claims the empty admin slot once.
+    match /system_config/admin {
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/system_config/admin)
+        && request.resource.data.uid == request.auth.uid;
+      allow read: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow create: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == userId
+          && request.resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /posts/{postId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /trees/{treeId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid)
+        || (signedIn() && resource.data.userId == 'all');
+      allow write: if isAdmin();
+    }
+
+    match /challenges/{challengeId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /reward_claims/{claimId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /certificates/{certificateId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /system_config/{configId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
