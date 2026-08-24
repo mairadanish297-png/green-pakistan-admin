@@ -16,7 +16,7 @@ export default function ChallengesPage() {
   async function loadChallenges() {
     setLoading(true);
     setError("");
-    try { setChallenges((await fetchChallenges()) as Challenge[]); } catch { setError("Challenges load nahi ho sake. Firestore connection aur rules check karein."); } finally { setLoading(false); }
+    try { setChallenges((await fetchChallenges()) as unknown as Challenge[]); } catch { setError("Challenges load nahi ho sake. Firestore connection aur rules check karein."); } finally { setLoading(false); }
   }
 
   useEffect(() => { void loadChallenges(); }, []);

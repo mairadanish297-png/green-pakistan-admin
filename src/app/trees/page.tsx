@@ -20,7 +20,7 @@ export default function TreesPage() {
   async function loadTrees() {
     setLoading(true);
     setError("");
-    try { setTrees((await fetchTrees()) as Tree[]); } catch { setError("Trees load nahi ho sake. Firestore connection check karein."); } finally { setLoading(false); }
+    try { setTrees((await fetchTrees()) as unknown as Tree[]); } catch { setError("Trees load nahi ho sake. Firestore connection check karein."); } finally { setLoading(false); }
   }
 
   useEffect(() => { void loadTrees(); }, []);

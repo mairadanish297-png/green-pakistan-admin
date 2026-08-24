@@ -1,64 +1,164 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, LoaderCircle, Search, ShieldAlert, Trash2, UserCheck, X } from "lucide-react";
-import { banUser, deleteUser, fetchUsers, verifyUser } from "@/lib/firestore";
-import type { User } from "@/types";
-import AuthGuard from "@/components/AuthGuard";
+import { useEffect, useState } from "react";
+import DataTable from "@/components/DataTable";
+import { fetchUsers, banUser, verifyUser, deleteUser } from "@/lib/firestore";
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [search, setSearch] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [actionId, setActionId] = useState<string | null>(null);
 
   async function loadUsers() {
     setLoading(true);
-    setError("");
     try {
-      const result = await Promise.race([
-        fetchUsers(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000)),
-      ]);
-      setUsers(result as User[]);
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      const message = code === "permission-denied"
-        ? "Data service permission denied. Backend connection configure karein."
-        : code === "failed-precondition"
-          ? "Data service setup incomplete hai. Backend configuration check karein."
-          : code === "unavailable"
-            ? "Data service unavailable hai. Internet connection check karein."
-            : "Users load nahi ho sake. Backend configuration check karein.";
-      const detail = error instanceof Error ? error.message : "No additional details";
-      setError(`${message} (${code || "unknown-error"}) ${detail}`);
+      const data = await fetchUsers();
+      setUsers(data as any[]);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { void loadUsers(); }, []);
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
-  const filteredUsers = useMemo(() => users.filter((user) => {
-    const term = search.toLowerCase();
-    return user.fullName?.toLowerCase().includes(term) || user.email?.toLowerCase().includes(term) || user.country?.toLowerCase().includes(term);
-  }), [search, users]);
+  async function handleBan(uid: string, currentStatus: boolean) {
+    await banUser(uid, !currentStatus);
+    loadUsers();
+  }
 
-  async function updateUser(action: "ban" | "verify" | "delete", user: User) {
-    if (action === "delete" && !window.confirm(`Delete ${user.fullName || "this user"}?`)) return;
-    setActionId(user.uid);
-    try {
-      if (action === "ban") await banUser(user.uid, !user.isBanned);
-      if (action === "verify") await verifyUser(user.uid, !user.isVerified);
-      if (action === "delete") await deleteUser(user.uid);
-      await loadUsers();
-    } catch {
-      setError("Action complete nahi ho saka. Firestore permissions check karein.");
-    } finally {
-      setActionId(null);
+  async function handleVerify(uid: string, currentStatus: boolean) {
+    await verifyUser(uid, !currentStatus);
+    loadUsers();
+  }
+
+  async function handleDelete(uid: string) {
+    if (confirm("Are you sure you want to delete this user?")) {
+      await deleteUser(uid);
+      loadUsers();
     }
   }
 
-  return <AuthGuard><main className="admin-shell"><div className="users-page"><div className="users-header"><div><p className="eyebrow">GOVERNANCE</p><h1>User management</h1><p className="muted">Review community members, verification and account access.</p></div><div className="user-count"><strong>{users.length}</strong><span>Total users</span></div></div><div className="users-toolbar"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users by name, email or country" /></div><button className="select-button" onClick={() => void loadUsers()}><LoaderCircle size={15} className={loading ? "spin" : ""} /> Refresh</button></div>{error && <div className="error-banner"><ShieldAlert size={17} />{error}</div>}<div className="users-table-wrap"><table className="users-table"><thead><tr><th>User</th><th>Location</th><th>Impact</th><th>Status</th><th>Role</th><th>Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan={6} className="empty-state">Loading users...</td></tr> : filteredUsers.length === 0 ? <tr><td colSpan={6} className="empty-state">No users found</td></tr> : filteredUsers.map((user) => <tr key={user.uid}><td><div className="user-cell"><span className="user-avatar">{(user.fullName || "U").slice(0, 2).toUpperCase()}</span><div><strong>{user.fullName || "Unnamed user"}</strong><small>{user.email || user.uid}</small></div></div></td><td>{user.country || "Pakistan"}</td><td><strong>{user.treesPlanted || 0}</strong> trees <small className="score">{user.score || 0} XP</small></td><td><span className={`status-pill ${user.isBanned ? "banned" : "active"}`}>{user.isBanned ? "Banned" : "Active"}</span></td><td><span className="role-label">{user.role || "Member"}</span>{user.isVerified && <Check size={14} className="verified-icon" />}</td><td><div className="action-buttons"><button title={user.isVerified ? "Remove verification" : "Verify user"} onClick={() => void updateUser("verify", user)} disabled={actionId === user.uid} className="table-action verify">{user.isVerified ? <X size={15} /> : <UserCheck size={15} />}</button><button title={user.isBanned ? "Unban user" : "Ban user"} onClick={() => void updateUser("ban", user)} disabled={actionId === user.uid} className="table-action ban">{user.isBanned ? <Check size={15} /> : <ShieldAlert size={15} />}</button><button title="Delete user" onClick={() => void updateUser("delete", user)} disabled={actionId === user.uid} className="table-action delete"><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div></div></main></AuthGuard>;
+  const columns = [
+    { key: "fullName", label: "Name" },
+    {
+      key: "uid",
+      label: "UID",
+      render: (v: any) => (
+        <span
+          className="text-xs font-mono"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          {String(v || "").slice(0, 12)}...
+        </span>
+      ),
+    },
+    {
+      key: "score",
+      label: "XP Score",
+      render: (v: any) => (
+        <span className="badge badge-gold">{v || 0} XP</span>
+      ),
+    },
+    {
+      key: "treesPlanted",
+      label: "Trees",
+      render: (v: any) => (
+        <span className="badge badge-green">{v || 0}</span>
+      ),
+    },
+    { key: "country", label: "Country" },
+    {
+      key: "isBanned",
+      label: "Status",
+      render: (v: any) =>
+        v ? (
+          <span className="badge badge-red">Banned</span>
+        ) : (
+          <span className="badge badge-green">Active</span>
+        ),
+    },
+    {
+      key: "isVerified",
+      label: "Verified",
+      render: (v: any) =>
+        v ? (
+          <span className="badge badge-blue">Yes</span>
+        ) : (
+          <span style={{ color: "var(--text-secondary)" }}>No</span>
+        ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="animate-fade-in">
+        <h1
+          className="text-3xl font-bold"
+          style={{ color: "var(--text-primary)" }}
+        >
+          User Management
+        </h1>
+        <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
+          Manage all registered users
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-40">
+          <div
+            className="w-8 h-8 border-2 rounded-full animate-spin"
+            style={{
+              borderColor: "var(--border)",
+              borderTopColor: "var(--emerald)",
+            }}
+          />
+        </div>
+      ) : (
+        <DataTable
+          title="All Users"
+          columns={columns}
+          data={users}
+          actions={(row: any) => (
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleBan(row.id, row.isBanned)}
+                className="px-3 py-1.5 rounded text-xs font-medium transition-all"
+                style={{
+                  background: row.isBanned
+                    ? "rgba(46,204,113,0.15)"
+                    : "rgba(231,76,60,0.15)",
+                  color: row.isBanned ? "var(--emerald)" : "var(--danger)",
+                }}
+              >
+                {row.isBanned ? "Unban" : "Ban"}
+              </button>
+              <button
+                onClick={() => handleVerify(row.id, row.isVerified)}
+                className="px-3 py-1.5 rounded text-xs font-medium"
+                style={{
+                  background: "rgba(52,152,219,0.15)",
+                  color: "var(--info)",
+                }}
+              >
+                {row.isVerified ? "Unverify" : "Verify"}
+              </button>
+              <button
+                onClick={() => handleDelete(row.id)}
+                className="px-3 py-1.5 rounded text-xs font-medium"
+                style={{
+                  background: "rgba(231,76,60,0.15)",
+                  color: "var(--danger)",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        />
+      )}
+    </div>
+  );
 }

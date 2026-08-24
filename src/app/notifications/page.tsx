@@ -15,7 +15,7 @@ export default function NotificationsPage() {
   async function loadNotifications() {
     setLoading(true);
     setError("");
-    try { setNotifications((await fetchNotifications()) as Notification[]); } catch { setError("Notifications load nahi ho sakin. Firestore connection aur rules check karein."); } finally { setLoading(false); }
+    try { setNotifications((await fetchNotifications()) as unknown as Notification[]); } catch { setError("Notifications load nahi ho sakin. Firestore connection aur rules check karein."); } finally { setLoading(false); }
   }
 
   useEffect(() => { void loadNotifications(); }, []);

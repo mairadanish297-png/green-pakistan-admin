@@ -17,7 +17,7 @@ export default function RewardsPage() {
 
   async function loadClaims() {
     setLoading(true); setError("");
-    try { setClaims((await fetchRewardClaims()) as RewardClaim[]); } catch { setError("Reward claims load nahi ho sakin. Firestore connection aur rules check karein."); } finally { setLoading(false); }
+    try { setClaims((await fetchRewardClaims()) as unknown as RewardClaim[]); } catch { setError("Reward claims load nahi ho sakin. Firestore connection aur rules check karein."); } finally { setLoading(false); }
   }
 
   useEffect(() => { void loadClaims(); }, []);

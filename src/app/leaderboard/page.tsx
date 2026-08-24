@@ -1,27 +1,157 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Crown, LoaderCircle, Medal, RefreshCw, Search, Sprout } from "lucide-react";
-import AuthGuard from "@/components/AuthGuard";
-import { fetchUsers } from "@/lib/firestore";
-import type { User } from "@/types";
+import { useEffect, useState } from "react";
+import { fetchCollection } from "@/lib/firestore";
 
 export default function LeaderboardPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [province, setProvince] = useState("all");
-  const [search, setSearch] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  async function loadUsers() {
-    setLoading(true); setError("");
-    try { setUsers((await fetchUsers()) as User[]); } catch { setError("Leaderboard load nahi ho saka. Firestore connection aur rules check karein."); } finally { setLoading(false); }
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await fetchCollection("users");
+        const sorted = (data as any[]).sort(
+          (a: any, b: any) => (b.score || 0) - (a.score || 0)
+        );
+        setUsers(sorted);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div
+          className="w-8 h-8 border-2 rounded-full animate-spin"
+          style={{
+            borderColor: "var(--border)",
+            borderTopColor: "var(--emerald)",
+          }}
+        />
+      </div>
+    );
   }
 
-  useEffect(() => { void loadUsers(); }, []);
+  return (
+    <div className="space-y-6">
+      <div className="animate-fade-in">
+        <h1
+          className="text-3xl font-bold"
+          style={{ color: "var(--text-primary)" }}
+        >
+          Leaderboard
+        </h1>
+        <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
+          Global rankings by XP score
+        </p>
+      </div>
 
-  const provinces = useMemo(() => [...new Set(users.map((user) => user.country).filter(Boolean))].sort(), [users]);
-  const rankedUsers = useMemo(() => users.filter((user) => province === "all" || user.country === province).filter((user) => user.fullName?.toLowerCase().includes(search.toLowerCase())).sort((first, second) => (second.score || 0) - (first.score || 0)), [province, search, users]);
+      <div
+        className="rounded-xl border overflow-hidden animate-fade-in"
+        style={{
+          background: "var(--bg-card)",
+          borderColor: "var(--border)",
+        }}
+      >
+        <table className="w-full">
+          <thead>
+            <tr style={{ background: "var(--bg-secondary)" }}>
+              <th
+                className="px-5 py-3 text-left text-xs font-semibold uppercase"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Rank
+              </th>
+              <th
+                className="px-5 py-3 text-left text-xs font-semibold uppercase"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Name
+              </th>
+              <th
+                className="px-5 py-3 text-left text-xs font-semibold uppercase"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                XP Score
+              </th>
+              <th
+                className="px-5 py-3 text-left text-xs font-semibold uppercase"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Trees
+              </th>
+              <th
+                className="px-5 py-3 text-left text-xs font-semibold uppercase"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Country
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user: any, index: number) => (
+              <tr
+                key={user.id}
+                className="border-t transition-colors"
+                style={{ borderColor: "var(--border)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--bg-hover)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                <td className="px-5 py-4 text-sm font-bold">
+                  {index === 0
+                    ? "🥇"
+                    : index === 1
+                    ? "🥈"
+                    : index === 2
+                    ? "🥉"
+                    : `#${index + 1}`}
+                </td>
+                <td
+                  className="px-5 py-4 text-sm font-medium"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {user.fullName || "Unknown"}
+                </td>
+                <td className="px-5 py-4">
+                  <span className="badge badge-gold">
+                    {user.score || 0} XP
+                  </span>
+                </td>
+                <td className="px-5 py-4">
+                  <span className="badge badge-green">
+                    {user.treesPlanted || 0}
+                  </span>
+                </td>
+                <td
+                  className="px-5 py-4 text-sm"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  {user.country || "N/A"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-  return <AuthGuard><main className="admin-shell"><div className="users-page"><div className="users-header"><div><p className="eyebrow">COMMUNITY PERFORMANCE</p><h1>Leaderboard</h1><p className="muted">Recognise the members creating the biggest impact.</p></div><div className="user-count"><strong>{rankedUsers.length}</strong><span>Ranked members</span></div></div>{error && <div className="error-banner"><Crown size={16} />{error}</div>}<div className="leaderboard-top">{rankedUsers.slice(0, 3).map((user, index) => <div className={`top-performer rank-${index + 1}`} key={user.uid}><span className="rank-icon">{index === 0 ? <Crown size={19} /> : <Medal size={18} />}</span><span className="leader-avatar">{(user.fullName || "U").slice(0, 2).toUpperCase()}</span><strong>{user.fullName || "Unnamed user"}</strong><span>{(user.score || 0).toLocaleString()} XP</span><small>{user.treesPlanted || 0} trees planted</small></div>)}</div><div className="leaderboard-toolbar"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search member" /></div><select className="leaderboard-select" value={province} onChange={(event) => setProvince(event.target.value)}><option value="all">All provinces</option>{provinces.map((item) => <option key={item} value={item}>{item}</option>)}</select><button className="select-button" onClick={() => void loadUsers()}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button></div><div className="users-table-wrap"><table className="users-table leaderboard-table"><thead><tr><th>Rank</th><th>Member</th><th>Location</th><th>Trees planted</th><th>Total XP</th></tr></thead><tbody>{loading ? <tr><td colSpan={5} className="empty-state"><LoaderCircle size={19} className="spin" /><br />Loading leaderboard...</td></tr> : rankedUsers.length === 0 ? <tr><td colSpan={5} className="empty-state">No ranked members found</td></tr> : rankedUsers.map((user, index) => <tr key={user.uid}><td><span className={`rank-number ${index < 3 ? "top-rank" : ""}`}>#{index + 1}</span></td><td><div className="user-cell"><span className="user-avatar">{(user.fullName || "U").slice(0, 2).toUpperCase()}</span><strong>{user.fullName || "Unnamed user"}</strong></div></td><td>{user.country || "Pakistan"}</td><td><span className="tree-count"><Sprout size={14} />{(user.treesPlanted || 0).toLocaleString()}</span></td><td><strong className="xp-value">{(user.score || 0).toLocaleString()} XP</strong></td></tr>)}</tbody></table></div></div></main></AuthGuard>;
+        {users.length === 0 && (
+          <div
+            className="p-12 text-center"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            No users found
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

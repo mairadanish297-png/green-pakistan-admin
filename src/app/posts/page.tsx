@@ -17,7 +17,7 @@ export default function PostsPage() {
     setLoading(true);
     setError("");
     try {
-      setPosts((await fetchPosts()) as Post[]);
+      setPosts((await fetchPosts()) as unknown as Post[]);
     } catch {
       setError("Posts load nahi ho sake. Firestore connection aur rules check karein.");
     } finally {

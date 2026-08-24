@@ -21,7 +21,7 @@ export default function EventsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  async function loadEvents() { setLoading(true); setError(""); try { setEvents((await fetchEvents()) as Event[]); } catch { setError("Events load nahi ho sake. Firestore connection aur rules check karein."); } finally { setLoading(false); } }
+  async function loadEvents() { setLoading(true); setError(""); try { setEvents((await fetchEvents()) as unknown as Event[]); } catch { setError("Events load nahi ho sake. Firestore connection aur rules check karein."); } finally { setLoading(false); } }
   useEffect(() => { void loadEvents(); }, []);
   async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setError(""); try { await addEvent({ ...form, attendeesCount: 0 }); setForm(initialForm); await loadEvents(); } catch { setError("Event save nahi ho saka. Firestore permissions check karein."); } finally { setSaving(false); } }
   async function handleImageUpload(file: File) { setUploading(true); setError(""); try { const imageUrl = await uploadImage(file); setForm((current) => ({ ...current, imageUrl })); } catch { setError("Image upload nahi ho saki. Cloudinary settings check karein."); } finally { setUploading(false); } }

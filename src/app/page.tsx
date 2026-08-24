@@ -28,6 +28,9 @@ import AuthGuard from "@/components/AuthGuard";
 import { fetchCollection } from "@/lib/firestore";
 
 const emptyChart = Array.from({ length: 8 }, (_, index) => ({ month: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"][index], trees: 0 }));
+type DashboardTree = Record<string, unknown>;
+type DashboardChallenge = { id: string; expiryDate?: string };
+type DashboardClaim = { id: string; status?: string };
 
 function recordDate(record: Record<string, unknown>) {
   const value = record.createdAt || record.timestamp || record.registeredAt;
@@ -53,13 +56,13 @@ export default function Home() {
         setMetrics({
           users: users.length,
           trees: trees.length,
-          challenges: challenges.filter((challenge) => !challenge.expiryDate || new Date(challenge.expiryDate) >= new Date()).length,
-          claims: claims.filter((claim) => claim.status === "pending").length,
+          challenges: (challenges as unknown as DashboardChallenge[]).filter((challenge) => !challenge.expiryDate || new Date(challenge.expiryDate) >= new Date()).length,
+          claims: (claims as unknown as DashboardClaim[]).filter((claim) => claim.status === "pending").length,
         });
         setEvents(eventRecords as typeof events);
         const now = new Date();
         const months = Array.from({ length: 8 }, (_, index) => new Date(now.getFullYear(), now.getMonth() - (7 - index), 1));
-        setPlantingData(months.map((month) => ({ month: month.toLocaleDateString("en", { month: "short" }), trees: trees.filter((tree) => { const date = recordDate(tree); return date && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).length })));
+        setPlantingData(months.map((month) => ({ month: month.toLocaleDateString("en", { month: "short" }), trees: (trees as unknown as DashboardTree[]).filter((tree) => { const date = recordDate(tree); return date && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).length })));
       } catch { setMetricsError(true); }
     }
     void loadMetrics();

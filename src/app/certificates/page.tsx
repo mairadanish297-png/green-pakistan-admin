@@ -1,31 +1,194 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Award, Download, FileText, Image as ImageIcon, LoaderCircle, RefreshCw, Search, Trash2 } from "lucide-react";
-import AuthGuard from "@/components/AuthGuard";
-import { deleteCertificate, fetchCertificates } from "@/lib/firestore";
-import type { Certificate } from "@/types";
+import { useEffect, useState } from "react";
+import StatsCard from "@/components/StatsCard";
+import { fetchCollection } from "@/lib/firestore";
 
-export default function CertificatesPage() {
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
-  const [search, setSearch] = useState("");
+export default function DashboardPage() {
+  const [stats, setStats] = useState({
+    users: 0,
+    trees: 0,
+    posts: 0,
+    challenges: 0,
+    events: 0,
+    notifications: 0,
+    rewards: 0,
+    pendingRewards: 0,
+    activeChallenges: 0,
+  });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [deleting, setDeleting] = useState<string | null>(null);
 
-  async function loadCertificates() {
-    setLoading(true); setError("");
-    try { setCertificates((await fetchCertificates()) as Certificate[]); } catch { setError("Certificates load nahi ho sake. Firestore connection aur rules check karein."); } finally { setLoading(false); }
+  useEffect(() => {
+    async function load() {
+      try {
+        const [users, trees, posts, challenges, events, notifications, rewards] =
+          await Promise.all([
+            fetchCollection("users"),
+            fetchCollection("trees"),
+            fetchCollection("posts"),
+            fetchCollection("challenges"),
+            fetchCollection("events"),
+            fetchCollection("notifications"),
+            fetchCollection("reward_claims"),
+          ]);
+
+        const activeChallenges = challenges.filter((c: any) => {
+          const exp = c.expiryDate;
+          if (!exp) return true;
+          return new Date(exp) > new Date();
+        }).length;
+
+        const pendingRewards = rewards.filter(
+          (r: any) => r.status === "pending"
+        ).length;
+
+        setStats({
+          users: users.length,
+          trees: trees.length,
+          posts: posts.length,
+          challenges: challenges.length,
+          events: events.length,
+          notifications: notifications.length,
+          rewards: rewards.length,
+          pendingRewards,
+          activeChallenges,
+        });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div
+          className="w-8 h-8 border-2 rounded-full animate-spin"
+          style={{
+            borderColor: "var(--border)",
+            borderTopColor: "var(--emerald)",
+          }}
+        />
+      </div>
+    );
   }
 
-  useEffect(() => { void loadCertificates(); }, []);
-  const visible = useMemo(() => certificates.filter((certificate) => `${certificate.userId} ${certificate.title || ""} ${certificate.certificateNumber || ""}`.toLowerCase().includes(search.toLowerCase())), [certificates, search]);
+  return (
+    <div className="space-y-8">
+      <div className="animate-fade-in">
+        <h1
+          className="text-3xl font-bold"
+          style={{ color: "var(--text-primary)" }}
+        >
+          Dashboard
+        </h1>
+        <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
+          Green Pakistan (Plantera) - Overview
+        </p>
+      </div>
 
-  async function removeCertificate(certificate: Certificate) {
-    if (!window.confirm("Is certificate ko delete karna hai?")) return;
-    setDeleting(certificate.id);
-    try { await deleteCertificate(certificate.id); setCertificates((current) => current.filter((item) => item.id !== certificate.id)); } catch { setError("Certificate delete nahi ho saka."); } finally { setDeleting(null); }
-  }
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatsCard
+          title="Total Users"
+          value={stats.users}
+          icon="👥"
+          change="+12% this month"
+          changeType="positive"
+          delay={0.1}
+        />
+        <StatsCard
+          title="Trees Planted"
+          value={stats.trees}
+          icon="🌳"
+          change="+8% this week"
+          changeType="positive"
+          delay={0.15}
+        />
+        <StatsCard
+          title="Social Posts"
+          value={stats.posts}
+          icon="📝"
+          change="Active community"
+          changeType="neutral"
+          delay={0.2}
+        />
+        <StatsCard
+          title="Active Challenges"
+          value={stats.activeChallenges}
+          icon="🏆"
+          change={`${stats.challenges} total`}
+          changeType="neutral"
+          delay={0.25}
+        />
+      </div>
 
-  return <AuthGuard><main className="admin-shell"><div className="users-page"><div className="users-header"><div><p className="eyebrow">USER ACHIEVEMENTS</p><h1>Certificates</h1><p className="muted">Review issued certificates and download the original files.</p></div><div className="user-count"><strong>{certificates.length}</strong><span>Issued certificates</span></div></div><div className="users-toolbar"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by user, title or certificate number" /></div><button className="select-button" onClick={() => void loadCertificates()}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button></div>{error && <div className="error-banner"><Award size={16} />{error}</div>}<div className="certificate-grid">{loading ? <div className="challenge-empty">Loading certificates...</div> : visible.length === 0 ? <div className="challenge-empty"><Award size={26} /><span>No certificates found</span></div> : visible.map((certificate) => <article className="certificate-card" key={certificate.id}><div className="certificate-preview">{certificate.imageUrl ? <img src={certificate.imageUrl} alt={certificate.title || "Certificate preview"} /> : <ImageIcon size={34} />}</div><div className="certificate-body"><span className="certificate-number">{certificate.certificateNumber || "Certificate"}</span><h3>{certificate.title || "Green achievement certificate"}</h3><p><strong>User:</strong> {certificate.userId}</p><p><strong>Issued:</strong> {certificate.issuedAt?.toDate ? certificate.issuedAt.toDate().toLocaleDateString() : certificate.issuedAt || "Not recorded"}</p><div className="certificate-actions">{certificate.pdfUrl ? <a className="download-button" href={certificate.pdfUrl} target="_blank" rel="noreferrer"><FileText size={15} /> View PDF</a> : <span className="missing-file"><FileText size={14} /> No PDF link</span>}{certificate.imageUrl && <a className="download-button secondary" href={certificate.imageUrl} download target="_blank" rel="noreferrer"><Download size={15} /> Picture</a>}<button className="table-action delete" title="Delete certificate" onClick={() => void removeCertificate(certificate)} disabled={deleting === certificate.id}><Trash2 size={15} /></button></div></div></article>)}</div></div></main></AuthGuard>;
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <StatsCard
+          title="Upcoming Events"
+          value={stats.events}
+          icon="📅"
+          delay={0.3}
+        />
+        <StatsCard
+          title="Notifications Sent"
+          value={stats.notifications}
+          icon="🔔"
+          delay={0.35}
+        />
+        <StatsCard
+          title="Reward Claims"
+          value={stats.rewards}
+          icon="🎁"
+          change={`${stats.pendingRewards} pending shipment`}
+          changeType="neutral"
+          delay={0.4}
+        />
+      </div>
+
+      <div
+        className="rounded-xl border p-6 animate-fade-in"
+        style={{
+          background: "var(--bg-card)",
+          borderColor: "var(--border)",
+          animationDelay: "0.5s",
+        }}
+      >
+        <h3
+          className="text-lg font-semibold mb-4"
+          style={{ color: "var(--text-primary)" }}
+        >
+          Quick Actions
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Send Notification", href: "/notifications", icon: "🔔" },
+            { label: "Create Challenge", href: "/challenges", icon: "🏆" },
+            { label: "Create Event", href: "/events", icon: "📅" },
+            { label: "View Map", href: "/trees", icon: "🗺️" },
+          ].map((action) => (
+            <a
+              key={action.href}
+              href={action.href}
+              className="flex items-center gap-3 p-4 rounded-lg border transition-all card-hover"
+              style={{
+                background: "var(--bg-secondary)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <span className="text-xl">{action.icon}</span>
+              <span
+                className="text-sm font-medium"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {action.label}
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
