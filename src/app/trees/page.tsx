@@ -75,12 +75,17 @@ export default function TreesPage() {
   const mapCenter = locatedTrees.length ? { latitude: locatedTrees[0].lat, longitude: locatedTrees[0].lng, zoom: 5.5 } : { latitude: 30.3753, longitude: 69.3451, zoom: 4.5 };
 
   async function downloadTrees(format: "xlsx" | "docx") {
-    const fields = Array.from(new Set(trees.flatMap((tree) => Object.keys(tree))));
+    const fields = Array.from(new Set(trees.flatMap((tree) => Object.keys(tree as Record<string, unknown>))));
     const headers = Array.from(new Set([...fields, "latitude", "longitude"]));
-    const rows = trees.map((tree) => Object.fromEntries(headers.map((field) => [
-      field,
-      field === "latitude" ? (Number.isFinite(tree.lat) ? tree.lat : "") : field === "longitude" ? (Number.isFinite(tree.lng) ? tree.lng : "") : exportValue(tree[field]),
-    ])));
+    const rows = trees.map((tree) => {
+      const row: Record<string, unknown> = tree as Record<string, unknown>;
+      return Object.fromEntries(headers.map((field) => [
+        field,
+        field === "latitude" ? (Number.isFinite(tree.lat) ? tree.lat : "")
+          : field === "longitude" ? (Number.isFinite(tree.lng) ? tree.lng : "")
+            : exportValue(row[field]),
+      ]));
+    });
     if (format === "xlsx") {
       const XLSX = await import("xlsx");
       const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
