@@ -75,6 +75,7 @@ export interface RewardClaim {
 export interface Certificate {
   id: string;
   userId: string;
+  userName?: string;
   certificateNumber?: string;
   title?: string;
   imageUrl?: string;

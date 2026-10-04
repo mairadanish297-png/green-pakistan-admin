@@ -1,5 +1,5 @@
 import { getAuth } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, setDoc, Timestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, setDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 
 export async function fetchCollection(collectionName: string) {
@@ -39,4 +39,22 @@ export async function isAdminUser(uid: string) { const snapshot = await getDoc(d
 
 export function currentAuthUid() { return getAuth().currentUser?.uid || null; }
 export async function fetchCertificates() { return fetchCollection("certificates"); }
+export async function issueCertificate(data: { userId: string; userName: string; title: string; certificateNumber: string }) {
+  const batch = writeBatch(db);
+  const certificateRef = doc(collection(db, "certificates"));
+  const issuedAt = Timestamp.now();
+  batch.set(certificateRef, { ...data, issuedAt });
+  const notificationRef = doc(collection(db, "notifications"));
+  batch.set(notificationRef, {
+    title: "Your certificate is ready",
+    description: `Your “${data.title}” certificate (${data.certificateNumber}) has been issued. Open the Certificates section in the app to view it.`,
+    type: "Milestone",
+    userId: data.userId,
+    certificateId: certificateRef.id,
+    isRead: false,
+    timestamp: issuedAt,
+  });
+  await batch.commit();
+  return { id: certificateRef.id, ...data, issuedAt };
+}
 export async function deleteCertificate(id: string) { await deleteDoc(doc(db, "certificates", id)); }

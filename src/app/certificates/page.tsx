@@ -1,194 +1,115 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import StatsCard from "@/components/StatsCard";
-import { fetchCollection } from "@/lib/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { Award, LoaderCircle, Printer, RefreshCw, Send } from "lucide-react";
+import AuthGuard from "@/components/AuthGuard";
+import { fetchCertificates, fetchUsers, issueCertificate } from "@/lib/firestore";
+import type { Certificate } from "@/types";
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState({
-    users: 0,
-    trees: 0,
-    posts: 0,
-    challenges: 0,
-    events: 0,
-    notifications: 0,
-    rewards: 0,
-    pendingRewards: 0,
-    activeChallenges: 0,
-  });
+type Recipient = { id: string; uid: string; fullName: string; email?: string };
+
+function displayDate(value: unknown) {
+  if (!value) return "Date not recorded";
+  const date = typeof value === "object" && value !== null && "toDate" in value && typeof value.toDate === "function"
+    ? value.toDate() as Date
+    : new Date(value as string | number | Date);
+  return Number.isNaN(date.getTime()) ? "Date not recorded" : date.toLocaleDateString();
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+export default function CertificatesPage() {
+  const [users, setUsers] = useState<Recipient[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [selectedUser, setSelectedUser] = useState("");
+  const [title, setTitle] = useState("Tree Planting Achievement");
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [users, trees, posts, challenges, events, notifications, rewards] =
-          await Promise.all([
-            fetchCollection("users"),
-            fetchCollection("trees"),
-            fetchCollection("posts"),
-            fetchCollection("challenges"),
-            fetchCollection("events"),
-            fetchCollection("notifications"),
-            fetchCollection("reward_claims"),
-          ]);
-
-        const activeChallenges = challenges.filter((c: any) => {
-          const exp = c.expiryDate;
-          if (!exp) return true;
-          return new Date(exp) > new Date();
-        }).length;
-
-        const pendingRewards = rewards.filter(
-          (r: any) => r.status === "pending"
-        ).length;
-
-        setStats({
-          users: users.length,
-          trees: trees.length,
-          posts: posts.length,
-          challenges: challenges.length,
-          events: events.length,
-          notifications: notifications.length,
-          rewards: rewards.length,
-          pendingRewards,
-          activeChallenges,
-        });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+  async function loadData() {
+    setLoading(true);
+    setError("");
+    try {
+      const [userRecords, certificateRecords] = await Promise.all([fetchUsers(), fetchCertificates()]);
+      setUsers(userRecords.map((value) => {
+        const user = value as Record<string, unknown>;
+        const id = String(user.id || user.uid || "");
+        return { id, uid: String(user.uid || id), fullName: String(user.fullName || user.name || "Green Pakistan member"), email: typeof user.email === "string" ? user.email : undefined };
+      }).filter((user) => user.uid));
+      setCertificates(certificateRecords as unknown as Certificate[]);
+    } catch {
+      setError("Users/certificates load nahi ho sake. Firestore connection aur permissions check karein.");
+    } finally {
+      setLoading(false);
     }
-    load();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div
-          className="w-8 h-8 border-2 rounded-full animate-spin"
-          style={{
-            borderColor: "var(--border)",
-            borderTopColor: "var(--emerald)",
-          }}
-        />
-      </div>
-    );
   }
 
-  return (
-    <div className="space-y-8">
-      <div className="animate-fade-in">
-        <h1
-          className="text-3xl font-bold"
-          style={{ color: "var(--text-primary)" }}
-        >
-          Dashboard
-        </h1>
-        <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
-          Green Pakistan (Plantera) - Overview
-        </p>
-      </div>
+  useEffect(() => { void loadData(); }, []);
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatsCard
-          title="Total Users"
-          value={stats.users}
-          icon="👥"
-          change="+12% this month"
-          changeType="positive"
-          delay={0.1}
-        />
-        <StatsCard
-          title="Trees Planted"
-          value={stats.trees}
-          icon="🌳"
-          change="+8% this week"
-          changeType="positive"
-          delay={0.15}
-        />
-        <StatsCard
-          title="Social Posts"
-          value={stats.posts}
-          icon="📝"
-          change="Active community"
-          changeType="neutral"
-          delay={0.2}
-        />
-        <StatsCard
-          title="Active Challenges"
-          value={stats.activeChallenges}
-          icon="🏆"
-          change={`${stats.challenges} total`}
-          changeType="neutral"
-          delay={0.25}
-        />
-      </div>
+  const sortedCertificates = useMemo(() => [...certificates].sort((a, b) => {
+    const time = (value: unknown) => {
+      if (value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function") return (value.toDate() as Date).getTime();
+      return new Date(value as string | number | Date).getTime() || 0;
+    };
+    return time(b.issuedAt) - time(a.issuedAt);
+  }), [certificates]);
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <StatsCard
-          title="Upcoming Events"
-          value={stats.events}
-          icon="📅"
-          delay={0.3}
-        />
-        <StatsCard
-          title="Notifications Sent"
-          value={stats.notifications}
-          icon="🔔"
-          delay={0.35}
-        />
-        <StatsCard
-          title="Reward Claims"
-          value={stats.rewards}
-          icon="🎁"
-          change={`${stats.pendingRewards} pending shipment`}
-          changeType="neutral"
-          delay={0.4}
-        />
-      </div>
+  async function handleIssue(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    const recipient = users.find((user) => user.uid === selectedUser);
+    if (!recipient) {
+      setError("Certificate ke liye registered user select karein.");
+      return;
+    }
+    setSending(true);
+    const certificateNumber = `GP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    try {
+      const certificate = await issueCertificate({ userId: recipient.uid, userName: recipient.fullName, title: title.trim(), certificateNumber });
+      setCertificates((current) => [certificate as Certificate, ...current]);
+      setSuccess(`Certificate ${recipient.fullName} ko issue karke app notification bhej di gayi.`);
+    } catch {
+      setError("Certificate issue nahi ho saka. Firestore admin permissions check karein.");
+    } finally {
+      setSending(false);
+    }
+  }
 
-      <div
-        className="rounded-xl border p-6 animate-fade-in"
-        style={{
-          background: "var(--bg-card)",
-          borderColor: "var(--border)",
-          animationDelay: "0.5s",
-        }}
-      >
-        <h3
-          className="text-lg font-semibold mb-4"
-          style={{ color: "var(--text-primary)" }}
-        >
-          Quick Actions
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Send Notification", href: "/notifications", icon: "🔔" },
-            { label: "Create Challenge", href: "/challenges", icon: "🏆" },
-            { label: "Create Event", href: "/events", icon: "📅" },
-            { label: "View Map", href: "/trees", icon: "🗺️" },
-          ].map((action) => (
-            <a
-              key={action.href}
-              href={action.href}
-              className="flex items-center gap-3 p-4 rounded-lg border transition-all card-hover"
-              style={{
-                background: "var(--bg-secondary)",
-                borderColor: "var(--border)",
-              }}
-            >
-              <span className="text-xl">{action.icon}</span>
-              <span
-                className="text-sm font-medium"
-                style={{ color: "var(--text-primary)" }}
-              >
-                {action.label}
-              </span>
-            </a>
-          ))}
-        </div>
-      </div>
+  function printCertificate(certificate: Certificate) {
+    const popup = window.open("", "_blank", "width=960,height=720");
+    if (!popup) {
+      setError("Print window block ho gayi. Browser pop-ups allow karke dobara try karein.");
+      return;
+    }
+    const recipientName = escapeHtml(certificate.userName || users.find((user) => user.uid === certificate.userId)?.fullName || "Green Pakistan member");
+    const certificateTitle = escapeHtml(certificate.title || "Achievement Certificate");
+    const certificateNumber = escapeHtml(certificate.certificateNumber || certificate.id);
+    const issuedDate = escapeHtml(displayDate(certificate.issuedAt));
+    popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${certificateTitle}</title><style>body{margin:0;padding:36px;font-family:Arial,sans-serif;color:#183629}.certificate{min-height:590px;box-sizing:border-box;border:12px double #23945b;padding:60px 48px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}.brand{letter-spacing:4px;color:#23945b;font-size:14px;font-weight:bold}.label{margin-top:45px;color:#648074;text-transform:uppercase;letter-spacing:5px;font-size:13px}.name{font-family:Georgia,serif;font-size:48px;margin:20px 0;color:#183629}.title{font-size:21px;color:#38644e}.rule{width:140px;border-top:2px solid #23945b;margin:28px}.meta{display:flex;justify-content:space-between;gap:120px;margin-top:56px;text-align:left;color:#52705f;font-size:13px}.meta strong{display:block;color:#183629;margin-top:7px}@media print{body{padding:0}.certificate{min-height:100vh}}</style></head><body><main class="certificate"><div class="brand">GREEN PAKISTAN</div><div class="label">Certificate of Achievement</div><h1 class="name">${recipientName}</h1><div class="title">${certificateTitle}</div><div class="rule"></div><p>In recognition of your valuable contribution to a greener Pakistan.</p><div class="meta"><div>Certificate number<strong>${certificateNumber}</strong></div><div>Date issued<strong>${issuedDate}</strong></div></div></main><script>window.onload=()=>window.print()</script></body></html>`);
+    popup.document.close();
+    popup.opener = null;
+  }
+
+  return <AuthGuard><main className="admin-shell"><div className="users-page">
+    <div className="users-header"><div><p className="eyebrow">COMMUNITY RECOGNITION</p><h1>Certificates</h1><p className="muted">Issue a certificate, notify its recipient in the app, and print or save a PDF copy.</p></div><div className="user-count"><strong>{certificates.length}</strong><span>Issued certificates</span></div></div>
+    {error && <div className="error-banner"><Award size={17} />{error}</div>}
+    <div className="certificate-layout">
+      <form className="certificate-issue-form" onSubmit={(event) => void handleIssue(event)}>
+        <div className="panel-heading"><div><h2>Issue certificate</h2><p className="muted">The certificate record and recipient notification are saved together.</p></div><Award size={20} className="panel-icon" /></div>
+        <label>Registered user<select value={selectedUser} onChange={(event) => setSelectedUser(event.target.value)} required disabled={loading}><option value="">Select a user...</option>{users.map((user) => <option key={user.uid} value={user.uid}>{user.fullName}{user.email ? ` — ${user.email}` : ""}</option>)}</select></label>
+        <label>Certificate title<input value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={100} placeholder="e.g. Tree Planting Achievement" /></label>
+        <p className="muted">Recipient ko in-app notification milegi. Unki app ke Certificates section mein record available hoga; yahan se printable copy bhi bana sakte hain.</p>
+        <button className="primary-button" type="submit" disabled={sending || loading || users.length === 0}><Send size={15} />{sending ? "Issuing..." : "Issue & notify recipient"}</button>
+        {success && <p className="form-success" role="status">{success}</p>}
+      </form>
+      <section className="panel certificate-records"><div className="panel-heading"><div><h2>Issued certificates</h2><p className="muted">Saved certificate records and their recipients</p></div><button className="select-button" onClick={() => void loadData()} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button></div>
+        {loading ? <div className="notification-empty"><LoaderCircle size={20} className="spin" />Loading certificates...</div> : sortedCertificates.length === 0 ? <div className="notification-empty"><Award size={23} /><span>No certificates issued yet</span></div> : <div className="certificate-list">{sortedCertificates.map((certificate) => <article className="certificate-record" key={certificate.id}><span className="certificate-record-icon"><Award size={17} /></span><div className="certificate-record-details"><strong>{certificate.title || "Achievement Certificate"}</strong><p>{certificate.userName || users.find((user) => user.uid === certificate.userId)?.fullName || certificate.userId}</p><small>{certificate.certificateNumber || certificate.id} · {displayDate(certificate.issuedAt)}</small></div><button className="select-button" onClick={() => printCertificate(certificate)}><Printer size={14} /> Print / Save PDF</button></article>)}</div>}
+      </section>
     </div>
-  );
+  </div></main></AuthGuard>;
 }
