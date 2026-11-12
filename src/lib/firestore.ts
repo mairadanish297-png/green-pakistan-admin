@@ -14,15 +14,35 @@ export async function fetchPosts() { return fetchCollection("posts"); }
 export async function deletePost(id: string) { await deleteDoc(doc(db, "posts", id)); }
 export async function fetchTrees() { return fetchCollection("trees"); }
 export async function fetchNotifications() { return fetchCollection("notifications"); }
-export async function sendNotification(data: { title: string; description: string; type: "Reminder" | "Social" | "Milestone"; userId?: string }) {
-  await addDoc(collection(db, "notifications"), {
-    title: data.title.trim(),
-    description: data.description.trim(),
-    type: data.type,
-    userId: data.userId?.trim() || "all",
-    isRead: false,
-    timestamp: Timestamp.now(),
+export async function sendNotification(data: {
+  title: string;
+  description: string;
+  type: "Reminder" | "Social" | "Milestone";
+  audience: "all" | "single";
+  targetUserId?: string;
+}) {
+  const user = getAuth().currentUser;
+  if (!user) throw new Error("Please sign in again before sending a notification.");
+
+  const response = await fetch("/api/notifications/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await user.getIdToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
   });
+  const result = await response.json() as { error?: string; message?: string; sent?: number; failed?: number };
+
+  if (!response.ok) {
+    throw new Error(result.error || "Notification could not be sent.");
+  }
+
+  return {
+    sent: result.sent || 0,
+    failed: result.failed || 0,
+    message: result.message || "Notification request completed.",
+  };
 }
 export async function fetchChallenges() { return fetchCollection("challenges"); }
 export async function addChallenge(data: unknown) { await addDoc(collection(db, "challenges"), data); }

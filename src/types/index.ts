@@ -41,6 +41,11 @@ export interface Notification {
   type: "Reminder" | "Social" | "Milestone";
   isRead: boolean;
   timestamp: any;
+  deliveryStatus?: "sending" | "sent" | "partial" | "failed" | "no_tokens" | "saved";
+  recipientCount?: number;
+  tokenCount?: number;
+  sentCount?: number;
+  failureCount?: number;
 }
 
 export interface Challenge {
